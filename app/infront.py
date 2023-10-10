@@ -381,7 +381,7 @@ def planting_tree(tree_id: int, seed_id: int, request: Request, db: Session = De
     方法为以json格式将access_token放在请求头的Authorization字段中，并在前面加上“Bearer ”
     前端传入种树位置tree_id: int
     种什么树seed_id: int
-
+    种树成功后端返回{"detail": "种树成功", "tree_id": tree_id, "seed_id": seed_id}
     """
     user = get_current_user(request, db)
     a = get_level(db, seed_id)
@@ -395,7 +395,7 @@ def planting_tree(tree_id: int, seed_id: int, request: Request, db: Session = De
     if tree_id in i:
         total_seed = get_total_seed_by_id(db, seed_id)
         time_start = datetime.now().date()
-        create_planting_tree(db, tree_id, total_seed.name, 0, user.student_number, seed_id, str(time_start))
+        create_planting_tree(db, tree_id, total_seed.name, user.student_number, seed_id, str(time_start))
         return {"detail": "种树成功", "tree_id": tree_id, "seed_id": seed_id}
     else:
         return HTTPException(status_code=409, detail="The location is occupied ")
@@ -408,15 +408,19 @@ def get_tree_info(tree_id: int, request: Request, db: Session = Depends(get_db))
     用access_token获取用户
     方法为以json格式将access_token放在请求头的Authorization字段中，并在前面加上“Bearer ”
     前端传入树所在的位置tree_id:int
-    后端返回一个浮点数 例（0.5）
+    后端返回字典类型 schedule：进度百分数;drop_number:已浇水滴数;seed_watering:种子所需水滴数
+    {"schedule": schedule, "drop_number": drop_number, "seed_watering": seed_watering}
     """
     user = get_current_user(request, db)
     seats = get_planting_trees_seat(db, user.student_number)
     if tree_id in seats:
         raise HTTPException(status_code=404, detail="No trees were planted at the location")
     else:
-        schedule_today = get_tree_yesterday_schedule(db, tree_id, user.student_number)
-    return schedule_today
+        tree = get_tree(db, tree_id, user.student_number)
+        schedule = tree.schedule_yesterday
+        drop_number = tree.drop_number
+        seed_watering = get_seed_watering(db, tree.seed_owner_id)
+    return {"schedule": schedule, "drop_number": drop_number, "seed_watering": seed_watering}
 
 
 # 获取树的种类
@@ -527,32 +531,38 @@ def watering(tree_id: int, request: Request, db: Session = Depends(get_db)):
     用access_token获取用户
     方法为以json格式将access_token放在请求头的Authorization字段中，并在前面加上“Bearer ”
     前端传入种树的位置
+    如果水壶里的水滴数大于等于树木所需的水滴数即种树完成返回掉高级卡概率（int），高级卡id(list)，低级卡id(list)
+    else返回字典类型 树木id，刚才浇水的水滴数{"tree_id": tree_id, "float_bottle": float_bottle}
     """
     user = get_current_user(request, db)
     tree_ids = get_planting_trees_seat(db, user.student_number)
     if tree_id not in tree_ids:
         seed_id = get_seed_id_by_tree(db, tree_id, user.student_number)
-        schedule_yesterday = get_tree_yesterday_schedule(db, tree_id, user.student_number)
+        tree = get_tree(db, tree_id, user.student_number)
+        schedule_yesterday = tree.schedule_yesterday
         float_bottle = get_bottle_float(db, user.student_number)
         if float_bottle == 0:
             return HTTPException(status_code=404, detail="The number of water drops is zero")
         seed_watering = get_seed_watering(db, seed_id)
         schedule_today = schedule_yesterday + (float_bottle / seed_watering)
-        if schedule_today >= 1:
+        drop_number = tree.drop_number + float_bottle
+        if (seed_watering - tree.drop_number) <= float_bottle:
             schedule_today = 1
             time_over = datetime.now().date()
             update_tree_over(db, tree_id, user.student_number, str(time_over))
             update_user_float_bottle(db, user.student_number, 0)
             update_tree_schedule(db, user.student_number, tree_id, schedule_today)
+            update_drop(db, tree_id, drop_number, user.student_number)
             get_total_energy(user, tree_id, schedule_yesterday, schedule_today, db)
             a = reward_probability(tree_id, request, db)
             delete_tree(db, user.student_number, tree_id)
             return a
         else:
+            update_drop(db, tree_id, drop_number, user.student_number)
             update_user_float_bottle(db, user.student_number, 0)
             update_tree_schedule(db, user.student_number, tree_id, schedule_today)
             get_total_energy(user, tree_id, schedule_yesterday, schedule_today, db)
-            return {tree_id, float_bottle}
+            return {"tree_id": tree_id, "float_bottle": float_bottle}
     else:
         return HTTPException(status_code=404, detail="Tree not found")
 
@@ -564,10 +574,10 @@ def focus_complete(focus_time: int, request: Request, db: Session = Depends(get_
     用access_token获取用户
     方法为以json格式将access_token放在请求头的Authorization字段中，并在前面加上“Bearer ”
     前端在用户完成时调用 传入专注时长（分钟为单位）
-    后端返回可能掉落的高级种子的id
+    后端返回可能掉落的高级种子的概率(int)和id(list)
     """
     user = get_current_user(request, db)
-    float_add = focus_time // 10
+    float_add = focus_time / 10
     float_bottle = user.float_bottle + float_add
     float_total = user.float_total + float_add
     update_user_float_bottle(db, user.student_number, float_bottle)

@@ -72,11 +72,10 @@ def create_self_card(db: Session, seed_id: int, card_id: int, number: int, get_t
 
 
 # 创建种植表
-def create_planting_tree(db: Session, tree_id: int, name: str, schedule_yesterday: float,
+def create_planting_tree(db: Session, tree_id: int, name: str,
                          owner3_number: str, seed_owner_id: int, time_start: str):
-    tree = models.PlantingTree(id=tree_id, name=name, schedule_yesterday=schedule_yesterday,
-                               owner3_number=owner3_number,
-                               seed_owner_id=seed_owner_id, time_start=time_start, time_over="")
+    tree = models.PlantingTree(id=tree_id, name=name, owner3_number=owner3_number,
+                               seed_owner_id=seed_owner_id, time_start=time_start)
 
     db.add(tree)
     db.commit()
@@ -162,11 +161,10 @@ def get_energy_today(db: Session, student_number: str):
     return energy_user.energy_day
 
 
-# 通过树id和学号查询树木昨日生长进度
-def get_tree_yesterday_schedule(db, tree_id: int, student_number: str):
+# 通过树id和学号查询树木
+def get_tree(db, tree_id: int, student_number: str):
     tree = db.query(models.PlantingTree).filter_by(id=tree_id, owner3_number=student_number).first()
-    schedule_yesterday = tree.schedule_yesterday
-    return schedule_yesterday
+    return tree
 
 
 # 种子长成用户获得的能量
@@ -320,6 +318,18 @@ def update_user_float_bottle(db: Session, student_number: str, float_bottle: int
         raise HTTPException(status_code=404, detail="User not found")
 
 
+# 更新种树表里的水滴数
+def update_drop(db: Session, tree_id: int, drop_number: float, student_number: str):
+    tree = db.query(models.PlantingTree).filter_by(id=tree_id, owner3_number=student_number).first()
+    if tree:
+        tree.drop_number = drop_number
+        db.commit()
+        db.refresh(tree)
+        return tree
+    else:
+        raise HTTPException(status_code=404, detail="Tree not found")
+
+
 # 更新总水滴数
 def update_user_float_total(db: Session, student_number: str, float_total: int):
     user = db.query(models.User).filter_by(student_number=student_number).first()
@@ -461,7 +471,7 @@ def delete_energy_user(db: Session, student_number: str):
         db.commit()
         return "already removed!"
     else:
-        raise "Energy_user not found"
+        return "Energy_user not found"
 
 
 def delete_self_seed(db: Session, student_number: str):

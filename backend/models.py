@@ -12,8 +12,8 @@ class User(Base):
     energy_total = Column(Integer, default=0)
     student_number = Column(String(12), primary_key=True, index=True)
     introduce = Column(String, default='此人很懒，没有留下任何简介')
-    float_total = Column(Integer, default=0)
-    float_bottle = Column(Integer, default=0)
+    float_total = Column(Float, default=0)
+    float_bottle = Column(Float, default=0)
     month_tree = Column(Integer, default=0)
     total_tree = Column(Integer, default=0)
     high_rate = Column(Boolean, default=False)
@@ -61,8 +61,9 @@ class SelfCard(Base):
 class PlantingTree(Base):
     __tablename__ = "plantingtrees"
     id = Column(Integer, index=True)  # 种植位置
-    name = Column(Integer)  # 数字对应名字
+    name = Column(String)  # 数字对应名字
     schedule_yesterday = Column(Float, default=0)
+    drop_number = Column(Float, default=0)
     owner3_number = Column(String(12), ForeignKey("users.student_number"), index=True)
     seed_owner_id = Column(Integer, ForeignKey("selfseeds.id"), index=True)
     time_start = Column(String, default="")
